@@ -6,7 +6,7 @@ GekkoDB is a custom, lightweight, high-performance NoSQL database engine designe
 
 By leveraging a pure systems programming approach, GekkoDB shifts away from high-level runtimes and garbage-collected environments. Instead, it relies on deterministic memory allocation, manual memory tracking, and low-level operating system primitives to ensure a completely predictable and minimal RAM footprint.
 
-The ultimate goal of the Minimum Viable Product (MVP) is to establish a solid, corruption-proof core capable of processing high-speed, standard key-value operations with zero runtime dependencies.
+The ultimate goal of the Minimum Viable Product (MVP) is to establish a solid, corruption-proof core capable of processing high-speed, standard no sql db operations with zero runtime dependencies.
 
 ---
 
