@@ -1,6 +1,12 @@
 const std = @import("std");
 const Io = std.Io;
 
+pub const RecordLocation = struct {
+    segment_id: u32,
+    offset: u64,
+    length: u32,
+};
+
 pub const KeyValueStore = struct {
     map: std.StringHashMap([]const u8),
 
@@ -46,3 +52,7 @@ pub const KeyValueStore = struct {
         }
     }
 };
+
+test {
+    _ = @import("root_test.zig");
+}

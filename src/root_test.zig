@@ -13,6 +13,7 @@ test "key value store put get delete" {
     store.delete("name");
     try std.testing.expect(store.get("name") == null);
 }
+
 test "store keeps data independent from caller buffers" {
     const allocator = std.testing.allocator;
     var store = KeyValueStore.init(allocator);
@@ -45,4 +46,9 @@ test "delete missing key does nothing" {
     defer store.deinit();
     store.delete("missing");
     try std.testing.expect(store.get("missing") == null);
+}
+
+test "Location index stores record locations by key" {
+    var index = root.LocationIndex.init(std.testing.allocator);
+    defer index.deinit();
 }
