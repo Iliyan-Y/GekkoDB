@@ -9,13 +9,23 @@
 - Fixed the store so it owns key/value bytes by duplicating them into the allocator and freeing them on delete/deinit.
 - Learned that `StringHashMap` stores the value slice but does not manage nested heap ownership automatically.
 - Zig lesson from this session: `[]const u8` can be borrowed data or owned data depending on how it was created; tests should make that distinction explicit.
+- Replaced the temporary `KeyValueStore` with `Index`, moving toward the real database architecture.
+- Added `RecordLocation` as compact metadata for where a record lives in storage.
+- `Index` now maps string keys to `RecordLocation`, owning only duplicated key bytes.
+- `RecordLocation` is stored by value, not heap-allocated, so it does not need manual free logic.
+- Moved tests into `src/root_test.zig` and imported them from `src/root.zig` for Zig test discovery.
+- Added index tests for insert/get, update existing key, and delete.
+- `zig build test` passed.
 
 ## Current Working Shape
 
-- `KeyValueStore` exists in `src/root.zig`.
-- Tests currently verify insert/read/delete and ownership independence from caller buffers.
+- `Index` exists in `src/root.zig`.
+- `RecordLocation` exists in `src/root.zig`.
+- Tests live in `src/root_test.zig` and are imported by a `test` block in `src/root.zig`.
+- Tests currently verify insert/get, updating an existing key, and deleting a key.
 - No persistence, sockets, or file-backed storage has been added yet.
 
 ## Next Likely Step
 
-- Add an overwrite/update test to define behavior when the same key is written twice. Split tests into a separate file later, once root.zig starts getting too crowded.Move from in-memory behavior to a tiny append-only log, which is where database storage actually begins
+- Design the append-only log record binary format before writing file I/O.
+- Next implementation should likely define a small `LogRecord` or encoder/decoder boundary for `put` and `delete` records.

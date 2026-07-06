@@ -43,7 +43,6 @@ pub const Index = struct {
         // fetchRemove lets you free the removed key/value pair on delete.
         if (self.map.fetchRemove(key)) |existing| {
             self.map.allocator.free(existing.key);
-            self.map.allocator.free(existing.value);
         }
     }
 };
