@@ -18,4 +18,4 @@
 
 ## Next Likely Step
 
-- Add an overwrite/update test to define behavior when the same key is written twice.
+- Add an overwrite/update test to define behavior when the same key is written twice. Split tests into a separate file later, once root.zig starts getting too crowded.Move from in-memory behavior to a tiny append-only log, which is where database storage actually begins

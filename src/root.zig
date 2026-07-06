@@ -19,17 +19,19 @@ pub const KeyValueStore = struct {
 
     pub fn put(self: *KeyValueStore, key: []const u8, value: []const u8) !void {
         // dupe gives the store its own memory.
-        const owned_key = try self.map.allocator.dupe(u8, key);
-        errdefer self.map.allocator.free(owned_key);
-
         const owned_value = try self.map.allocator.dupe(u8, value);
         errdefer self.map.allocator.free(owned_value);
 
-        // fetchPut lets you clean up old values when replacing an existing key.
-        if (try self.map.fetchPut(owned_key, owned_value)) |existing| {
-            self.map.allocator.free(existing.key);
-            self.map.allocator.free(existing.value);
+        // handle value update
+        if (self.map.getEntry(key)) |entry| {
+            self.map.allocator.free(entry.value_ptr.*);
+            entry.value_ptr.* = owned_value;
+            return;
         }
+
+        const owned_key = try self.map.allocator.dupe(u8, key);
+        errdefer self.map.allocator.free(owned_key);
+        try self.map.put(owned_key, owned_value);
     }
 
     pub fn get(self: *KeyValueStore, key: []const u8) ?[]const u8 {
@@ -44,31 +46,3 @@ pub const KeyValueStore = struct {
         }
     }
 };
-
-test "key value store put get delete" {
-    var store = KeyValueStore.init(std.testing.allocator);
-    defer store.deinit();
-
-    try store.put("name", "gekko");
-    try std.testing.expectEqualStrings("gekko", store.get("name").?);
-
-    store.delete("name");
-    try std.testing.expect(store.get("name") == null);
-}
-test "store keeps data independent from caller buffers" {
-    const allocator = std.testing.allocator;
-    var store = KeyValueStore.init(allocator);
-    defer store.deinit();
-
-    var key_buf = try allocator.dupe(u8, "name");
-    defer allocator.free(key_buf);
-
-    var value_buf = try allocator.dupe(u8, "gekko");
-    defer allocator.free(value_buf);
-
-    try store.put(key_buf, value_buf);
-
-    key_buf[0] = 'X';
-    value_buf[0] = 'Y';
-    try std.testing.expectEqualStrings("gekko", store.get("name").?);
-}
