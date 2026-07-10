@@ -1,7 +1,7 @@
 const std = @import("std");
-const root = @import("root.zig");
+const domain = @import("index.zig");
 
-const Index = root.Index;
+const Index = domain.Index;
 
 test "Location index stores record locations by key" {
     var index = Index.init(std.testing.allocator);

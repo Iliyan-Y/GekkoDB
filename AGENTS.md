@@ -12,6 +12,7 @@ sockets.
 - Teach how databases work under the hood and all relative topics as race conditions etc. 
 - Never write code yourself in to a file except you are explicitly asked to do so 
 - Always give the code to the user to write himself or give guidelines
+- keep the files small pref under 200-250 lines 
 
 ## Current State
 
