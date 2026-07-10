@@ -29,8 +29,11 @@
 - Added encoding, decoding, and malformed-operation header tests. The malformed test uses `std.testing.expectError` and passes the fixed-size array by pointer with `&array`.
 - Added the borrowed `Record` storage type. Its `createHeader()` method validates operation semantics and converts slice lengths to `u32` only after explicit bounds checks.
 - Chose `createHeader()` over `header()` because it constructs a derived header value rather than acting as a getter; this remains allocation-free.
+- Renamed the storage format module from `log_record.zig` to `storage_record.zig`; call sites import it as `storage` and use `storage.Record`, `storage.Header`, and `storage.Operation`.
+- Added valid-delete and malformed-delete tests: a tombstone has an empty value, and a delete carrying value bytes returns `error.DeleteHasValue`.
+- Implemented `Record.encodedLength()` using checked `std.math.add` operations so record-size arithmetic cannot silently overflow `usize`.
+- Corrected `encodedLength()` to calculate header bytes plus key bytes plus value bytes.
 - Session used implementation-first development followed by focused tests, rather than test-driven development.
-- Tests were not run by Codex during this assisted-coding session; the next session should start with `zig build test`.
 
 ## Current Working Shape
 
@@ -41,11 +44,11 @@
 - Storage record tests live in `src/storage/storage_record_test.zig`.
 - `src/root.zig` imports module-specific tests for Zig test discovery.
 - Tests currently verify insert/get, updating an existing key, and deleting a key.
-- Log record tests verify the logical encoded header size, explicit big-endian encoding/decoding, rejection of invalid operation tags, and `put` record header construction.
+- Storage record tests verify the logical encoded header size, explicit big-endian encoding/decoding, rejection of invalid operation tags, `put`/`delete` header construction, and rejection of delete values.
+- `Record.encodedLength()` calculates the complete header, key, and value length without allocating memory and reports `error.RecordTooLarge` on arithmetic overflow.
 - No persistence, sockets, or file-backed storage has been added yet.
 
 ## Next Likely Step
 
-- Run `zig build test` to verify the completed header and logical-record work.
-- Add tests for delete-header construction and rejecting a delete record with a non-empty value.
-- After those invariants are covered, add full record encoding for `put` and `delete`: `[header][key bytes][value bytes]` for put and `[header][key bytes]` for delete.
+- Add focused `encodedLength()` tests for both `put` and `delete` records.
+- After the length calculation is covered, add full record encoding for `put` and `delete`: `[header][key bytes][value bytes]` for put and `[header][key bytes]` for delete.

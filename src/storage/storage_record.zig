@@ -80,4 +80,28 @@ pub const Record = struct {
             .value_len = value_len,
         };
     }
+
+    pub fn encodedLength(self: @This()) error{
+        InvalidOperation,
+        DeleteHasValue,
+        KeyTooLarge,
+        ValueTooLarge,
+        RecordTooLarge,
+    }!usize {
+        _ = try self.createHeader();
+
+        // check header for overflow
+        const header_and_key = std.math.add(
+            usize,
+            encoded_size,
+            self.key.len,
+        ) catch return error.RecordTooLarge;
+
+        // check and return the record or overflow error
+        return std.math.add(
+            usize,
+            header_and_key,
+            self.value.len,
+        ) catch return error.RecordTooLarge;
+    }
 };
