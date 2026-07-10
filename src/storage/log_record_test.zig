@@ -54,3 +54,18 @@ test "invalid log Op throws error" {
 
     try testing.expectError(error.InvalidOperation, log.LogRecordHeader.decode(&malfromed));
 }
+test "put record builds a matching header" {
+    const record = log.LogRecord{
+        .op = .put,
+        .key = "cat",
+        .value = "meow",
+    };
+
+    const header = try record.createHeader();
+
+    try expectEq(log.LOG_MAGIC, header.magic);
+    try expectEq(log.LOG_VERSION, header.version);
+    try expectEq(log.LogOp.put, header.op);
+    try expectEq(@as(u32, 3), header.key_len);
+    try expectEq(@as(u32, 4), header.value_len);
+}

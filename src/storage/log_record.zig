@@ -40,3 +40,44 @@ pub const LogRecordHeader = struct {
         };
     }
 };
+
+pub const LogRecord = struct {
+    op: LogOp,
+    key: []const u8,
+    value: []const u8,
+
+    pub fn createHeader(self: @This()) error{
+        InvalidOperation,
+        DeleteHasValue,
+        KeyTooLarge,
+        ValueTooLarge,
+    }!LogRecordHeader {
+        switch (self.op) {
+            .put => {},
+            .delete => {
+                if (self.value.len != 0) {
+                    return error.DeleteHasValue;
+                }
+            },
+            else => return error.InvalidOperation,
+        }
+        const max_length = @as(usize, std.math.maxInt(u32));
+
+        if (self.key.len > max_length) {
+            return error.KeyTooLarge;
+        }
+        if (self.value.len > max_length) {
+            return error.ValueTooLarge;
+        }
+        const key_len: u32 = @intCast(self.key.len);
+        const value_len: u32 = @intCast(self.value.len);
+
+        return .{
+            .magic = LOG_MAGIC,
+            .version = LOG_VERSION,
+            .op = self.op,
+            .key_len = key_len,
+            .value_len = value_len,
+        };
+    }
+};

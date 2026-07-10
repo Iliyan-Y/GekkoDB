@@ -24,21 +24,28 @@
 - Removed a stale unused `std.Io` alias from the index module.
 - User preference clarified: avoid re-exporting everything from `root.zig`; import concrete modules directly where needed unless a curated package API becomes useful later.
 - User preference clarified: tests should live per file/module rather than in a single broad `root_test.zig`.
+- Implemented explicit big-endian `LogRecordHeader` encoding and decoding for the 14-byte header format.
+- `LogOp` is now non-exhaustive; decoding uses `@enumFromInt` and rejects unknown operation tags with `error.InvalidOperation`.
+- Added encoding, decoding, and malformed-operation header tests. The malformed test uses `std.testing.expectError` and passes the fixed-size array by pointer with `&array`.
+- Added the borrowed `LogRecord` storage type. Its `createHeader()` method validates operation semantics and converts slice lengths to `u32` only after explicit bounds checks.
+- Chose `createHeader()` over `header()` because it constructs a derived header value rather than acting as a getter; this remains allocation-free.
+- Session used implementation-first development followed by focused tests, rather than test-driven development.
+- Tests were not run by Codex during this assisted-coding session; the next session should start with `zig build test`.
 
 ## Current Working Shape
 
 - `Index` exists in `src/domain/index.zig`.
 - `RecordLocation` exists in `src/domain/index.zig`.
 - Index tests live in `src/domain/index_test.zig`.
-- Log record format constants/types exist in `src/storage/log_record.zig`.
+- Log record format constants/types, header encoding/decoding, and a logical borrowed record type exist in `src/storage/log_record.zig`.
 - Log record tests live in `src/storage/log_record_test.zig`.
 - `src/root.zig` imports module-specific tests for Zig test discovery.
 - Tests currently verify insert/get, updating an existing key, and deleting a key.
-- Log record tests currently verify that the logical encoded header size is 14 bytes and that the Zig struct size may include padding.
+- Log record tests verify the logical encoded header size, explicit big-endian encoding/decoding, rejection of invalid operation tags, and `put` record header construction.
 - No persistence, sockets, or file-backed storage has been added yet.
 
 ## Next Likely Step
 
-- Implement and test explicit binary encoding for `LogRecordHeader` in `src/storage/log_record.zig`.
-- Teach why DB file formats should write individual integer fields with a chosen endian order instead of dumping raw Zig struct bytes.
-- After header encoding is stable, add full record encoding for `put` and `delete`: `[header][key bytes][value bytes]` for put and `[header][key bytes]` for delete.
+- Run `zig build test` to verify the completed header and logical-record work.
+- Add tests for delete-header construction and rejecting a delete record with a non-empty value.
+- After those invariants are covered, add full record encoding for `put` and `delete`: `[header][key bytes][value bytes]` for put and `[header][key bytes]` for delete.
