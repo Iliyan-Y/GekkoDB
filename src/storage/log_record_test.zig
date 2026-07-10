@@ -3,6 +3,13 @@ const std = @import("std");
 const testing = std.testing;
 const expectEq = testing.expectEqual;
 
+const encodedStub = [log.encoded_size]u8{
+    0x47, 0x4b, 0x44, 0x42,
+    0x01, 0x02, 0x00, 0x00,
+    0x00, 0x03, 0x00, 0x00,
+    0x00, 0x05,
+};
+
 test "log record header has expected logical size" {
     const header_size = @sizeOf(u32) + //magic
         @sizeOf(u8) + // version
@@ -33,16 +40,17 @@ test "log record header encodes as big-endian bytes" {
 }
 
 test "log record header decodes big-endian bytes" {
-    const encoded = [log.encoded_size]u8{
-        0x47, 0x4b, 0x44, 0x42,
-        0x01, 0x02, 0x00, 0x00,
-        0x00, 0x03, 0x00, 0x00,
-        0x00, 0x05,
-    };
-    const header = try log.LogRecordHeader.decode(&encoded);
+    const header = try log.LogRecordHeader.decode(&encodedStub);
     try expectEq(log.LOG_MAGIC, header.magic);
     try expectEq(log.LOG_VERSION, header.version);
     try expectEq(log.LogOp.delete, header.op);
     try expectEq(@as(u32, 3), header.key_len);
     try expectEq(@as(u32, 5), header.value_len);
+}
+
+test "invalid log Op throws error" {
+    var malfromed = encodedStub;
+    malfromed[5] = 0xff;
+
+    try testing.expectError(error.InvalidOperation, log.LogRecordHeader.decode(&malfromed));
 }

@@ -7,6 +7,7 @@ pub const encoded_size = 14;
 pub const LogOp = enum(u8) {
     put = 1,
     delete = 2,
+    _,
 };
 
 pub const LogRecordHeader = struct {
@@ -26,6 +27,10 @@ pub const LogRecordHeader = struct {
 
     pub fn decode(input: *const [encoded_size]u8) error{InvalidOperation}!@This() {
         const op: LogOp = @enumFromInt(input[5]);
+        switch (op) {
+            .put, .delete => {},
+            else => return error.InvalidOperation,
+        }
         return .{
             .magic = std.mem.readInt(u32, input[0..4], .big),
             .version = input[4],
