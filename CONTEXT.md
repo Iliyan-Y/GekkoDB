@@ -18,16 +18,16 @@
 - `zig build test` passed.
 - Reorganized the scaffold toward per-boundary modules and per-file tests.
 - Moved the index into `src/domain/index.zig` with tests in `src/domain/index_test.zig`.
-- Added the first storage-format module at `src/storage/log_record.zig` with tests in `src/storage/log_record_test.zig`.
+- Added the first storage-format module at `src/storage/storage_record.zig` with tests in `src/storage/storage_record_test.zig`.
 - Kept `src/root.zig` as a small test aggregator for now.
 - Chose `storage/` instead of `log/` because append-only logs, recovery, mmap segments, and compaction are all storage-layer concerns.
 - Removed a stale unused `std.Io` alias from the index module.
 - User preference clarified: avoid re-exporting everything from `root.zig`; import concrete modules directly where needed unless a curated package API becomes useful later.
 - User preference clarified: tests should live per file/module rather than in a single broad `root_test.zig`.
-- Implemented explicit big-endian `LogRecordHeader` encoding and decoding for the 14-byte header format.
-- `LogOp` is now non-exhaustive; decoding uses `@enumFromInt` and rejects unknown operation tags with `error.InvalidOperation`.
+- Implemented explicit big-endian `Header` encoding and decoding for the 14-byte storage-record header format.
+- `Operation` is non-exhaustive; decoding uses `@enumFromInt` and rejects unknown operation tags with `error.InvalidOperation`.
 - Added encoding, decoding, and malformed-operation header tests. The malformed test uses `std.testing.expectError` and passes the fixed-size array by pointer with `&array`.
-- Added the borrowed `LogRecord` storage type. Its `createHeader()` method validates operation semantics and converts slice lengths to `u32` only after explicit bounds checks.
+- Added the borrowed `Record` storage type. Its `createHeader()` method validates operation semantics and converts slice lengths to `u32` only after explicit bounds checks.
 - Chose `createHeader()` over `header()` because it constructs a derived header value rather than acting as a getter; this remains allocation-free.
 - Session used implementation-first development followed by focused tests, rather than test-driven development.
 - Tests were not run by Codex during this assisted-coding session; the next session should start with `zig build test`.
@@ -37,8 +37,8 @@
 - `Index` exists in `src/domain/index.zig`.
 - `RecordLocation` exists in `src/domain/index.zig`.
 - Index tests live in `src/domain/index_test.zig`.
-- Log record format constants/types, header encoding/decoding, and a logical borrowed record type exist in `src/storage/log_record.zig`.
-- Log record tests live in `src/storage/log_record_test.zig`.
+- Storage record format constants/types, header encoding/decoding, and a logical borrowed record type exist in `src/storage/storage_record.zig`.
+- Storage record tests live in `src/storage/storage_record_test.zig`.
 - `src/root.zig` imports module-specific tests for Zig test discovery.
 - Tests currently verify insert/get, updating an existing key, and deleting a key.
 - Log record tests verify the logical encoded header size, explicit big-endian encoding/decoding, rejection of invalid operation tags, and `put` record header construction.

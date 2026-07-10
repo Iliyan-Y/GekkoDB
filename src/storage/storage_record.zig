@@ -4,20 +4,20 @@ pub const LOG_MAGIC: u32 = 0x474b4442; // "GKDB"
 pub const LOG_VERSION: u8 = 1;
 pub const encoded_size = 14;
 
-pub const LogOp = enum(u8) {
+pub const Operation = enum(u8) {
     put = 1,
     delete = 2,
     _,
 };
 
-pub const LogRecordHeader = struct {
+pub const Header = struct {
     magic: u32,
     version: u8,
-    op: LogOp,
+    op: Operation,
     key_len: u32,
     value_len: u32,
 
-    pub fn encode(self: LogRecordHeader, output: *[encoded_size]u8) void {
+    pub fn encode(self: Header, output: *[encoded_size]u8) void {
         std.mem.writeInt(u32, output[0..4], self.magic, .big);
         output[4] = self.version;
         output[5] = @intFromEnum(self.op);
@@ -26,7 +26,7 @@ pub const LogRecordHeader = struct {
     }
 
     pub fn decode(input: *const [encoded_size]u8) error{InvalidOperation}!@This() {
-        const op: LogOp = @enumFromInt(input[5]);
+        const op: Operation = @enumFromInt(input[5]);
         switch (op) {
             .put, .delete => {},
             else => return error.InvalidOperation,
@@ -41,8 +41,8 @@ pub const LogRecordHeader = struct {
     }
 };
 
-pub const LogRecord = struct {
-    op: LogOp,
+pub const Record = struct {
+    op: Operation,
     key: []const u8,
     value: []const u8,
 
@@ -51,7 +51,7 @@ pub const LogRecord = struct {
         DeleteHasValue,
         KeyTooLarge,
         ValueTooLarge,
-    }!LogRecordHeader {
+    }!Header {
         switch (self.op) {
             .put => {},
             .delete => {
