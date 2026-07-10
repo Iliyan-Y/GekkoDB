@@ -13,6 +13,7 @@ sockets.
 - Never write code yourself in to a file except you are explicitly asked to do so 
 - Always give the code to the user to write himself or give guidelines
 - keep the files small pref under 200-250 lines 
+ - Test-After Development (TAD) or simply Code-First Development, no TDD. 
 
 ## Current State
 
