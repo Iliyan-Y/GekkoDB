@@ -3,7 +3,7 @@ const std = @import("std");
 const testing = std.testing;
 const expectEq = testing.expectEqual;
 
-const encodedStub = [storage.encoded_size]u8{
+const encodedStub = [storage.ENCODED_SIZE]u8{
     0x47, 0x4b, 0x44, 0x42,
     0x01, 0x02, 0x00, 0x00,
     0x00, 0x03, 0x00, 0x00,
@@ -94,4 +94,16 @@ test "delete record rejects a non-empty value" {
     };
 
     try testing.expectError(error.DeleteHasValue, record.createHeader());
+}
+
+test "put record calculates its encoded length" {
+    const record = storage.Record{
+        .op = .put,
+        .key = "lizard",
+        .value = "gekko",
+    };
+
+    const expectedLen = try record.encodedLength();
+
+    try expectEq(storage.ENCODED_SIZE + record.key.len + record.value.len, expectedLen);
 }

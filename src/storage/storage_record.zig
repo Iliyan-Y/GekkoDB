@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub const LOG_MAGIC: u32 = 0x474b4442; // "GKDB"
 pub const LOG_VERSION: u8 = 1;
-pub const encoded_size = 14;
+pub const ENCODED_SIZE = 14;
 
 pub const Operation = enum(u8) {
     put = 1,
@@ -17,7 +17,7 @@ pub const Header = struct {
     key_len: u32,
     value_len: u32,
 
-    pub fn encode(self: Header, output: *[encoded_size]u8) void {
+    pub fn encode(self: Header, output: *[ENCODED_SIZE]u8) void {
         std.mem.writeInt(u32, output[0..4], self.magic, .big);
         output[4] = self.version;
         output[5] = @intFromEnum(self.op);
@@ -25,7 +25,7 @@ pub const Header = struct {
         std.mem.writeInt(u32, output[10..14], self.value_len, .big);
     }
 
-    pub fn decode(input: *const [encoded_size]u8) error{InvalidOperation}!@This() {
+    pub fn decode(input: *const [ENCODED_SIZE]u8) error{InvalidOperation}!@This() {
         const op: Operation = @enumFromInt(input[5]);
         switch (op) {
             .put, .delete => {},
@@ -93,7 +93,7 @@ pub const Record = struct {
         // check header for overflow
         const header_and_key = std.math.add(
             usize,
-            encoded_size,
+            ENCODED_SIZE,
             self.key.len,
         ) catch return error.RecordTooLarge;
 
