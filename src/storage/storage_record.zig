@@ -104,4 +104,32 @@ pub const Record = struct {
             self.value.len,
         ) catch return error.RecordTooLarge;
     }
+
+    pub fn encodeInto(self: @This(), output: []u8) error{
+        InvalidOperation,
+        DeleteHasValue,
+        KeyTooLarge,
+        ValueTooLarge,
+        RecordTooLarge,
+        BufferTooSmall,
+    }!usize {
+        const required_length = try self.encodedLength();
+
+        if (output.len < required_length) {
+            return error.BufferTooSmall;
+        }
+
+        const header = try self.createHeader();
+
+        var encoded_header: [ENCODED_SIZE]u8 = undefined;
+        header.encode(&encoded_header);
+
+        @memcpy(output[0..ENCODED_SIZE], &encoded_header);
+
+        const key_end = ENCODED_SIZE + self.key.len;
+        @memcpy(output[ENCODED_SIZE..key_end], self.key);
+        @memcpy(output[key_end..required_length], self.value);
+
+        return required_length;
+    }
 };

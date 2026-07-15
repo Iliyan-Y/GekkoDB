@@ -107,3 +107,48 @@ test "put record calculates its encoded length" {
 
     try expectEq(storage.ENCODED_SIZE + record.key.len + record.value.len, expectedLen);
 }
+
+test "delete record calculates its encoded length without value bytes" {
+    const record = storage.Record{
+        .op = .delete,
+        .key = "lizard",
+        .value = "",
+    };
+
+    const encoded_length = try record.encodedLength();
+
+    try expectEq(
+        storage.ENCODED_SIZE + record.key.len,
+        encoded_length,
+    );
+}
+
+test "put record encodes header key and value contiguously" {
+    const record = storage.Record{
+        .op = .put,
+        .key = "cat",
+        .value = "meow",
+    };
+
+    var output: [storage.ENCODED_SIZE + 3 + 4]u8 =
+        undefined;
+
+    const written = try record.encodeInto(&output);
+
+    try expectEq(output.len, written);
+    try testing.expectEqualSlices(u8, &.{
+        // Header
+        0x47, 0x4b, 0x44, 0x42,
+        0x01, 0x01, 0x00, 0x00,
+        0x00, 0x03, 0x00, 0x00,
+        0x00, 0x04,
+
+        // Key: "cat"
+        0x63, 0x61,
+        0x74,
+
+        // Value: "meow"
+        0x6d, 0x65, 0x6f,
+        0x77,
+    }, &output);
+}
