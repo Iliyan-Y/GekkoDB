@@ -10,6 +10,11 @@ pub const Operation = enum(u8) {
     _,
 };
 
+pub const DecodedRecord = struct {
+    record: Record,
+    bytes: usize,
+};
+
 pub const Header = struct {
     magic: u32,
     version: u8,
@@ -131,5 +136,57 @@ pub const Record = struct {
         @memcpy(output[key_end..required_length], self.value);
 
         return required_length;
+    }
+
+    pub fn decode(input: []const u8) error{
+        InvalidOperation,
+        InvalidMagic,
+        UnsupportedVersion,
+        DeleteHasValue,
+        TruncatedRecord,
+        RecordTooLarge,
+    }!DecodedRecord {
+        if (input.len < ENCODED_SIZE) {
+            return error.TruncatedRecord;
+        }
+
+        const header = try Header.decode(input[0..ENCODED_SIZE]);
+
+        if (header.magic != LOG_MAGIC) {
+            return error.InvalidMagic;
+        }
+        if (header.version != LOG_VERSION) {
+            return error.UnsupportedVersion;
+        }
+        if (header.op == .delete and header.value_len != 0) {
+            return error.DeleteHasValue;
+        }
+
+        const key_length: usize = @intCast(header.key_len);
+        const value_length: usize = @intCast(header.value_len);
+
+        const key_end = std.math.add(
+            usize,
+            ENCODED_SIZE,
+            key_length,
+        ) catch return error.RecordTooLarge;
+
+        const record_end = std.math.add(
+            usize,
+            key_end,
+            value_length,
+        ) catch return error.RecordTooLarge;
+
+        if (input.len < record_end) {
+            return error.TruncatedRecord;
+        }
+        return .{
+            .record = .{
+                .op = header.op,
+                .key = input[ENCODED_SIZE..key_end],
+                .value = input[key_end..record_end],
+            },
+            .bytes = record_end,
+        };
     }
 };
