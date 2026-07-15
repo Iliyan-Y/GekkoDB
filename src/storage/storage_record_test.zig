@@ -152,3 +152,49 @@ test "put record encodes header key and value contiguously" {
         0x77,
     }, &output);
 }
+
+test "delete record encodes header and key without value bytes" {
+    const record = storage.Record{
+        .op = .delete,
+        .key = "cat",
+        .value = "",
+    };
+
+    var output: [storage.ENCODED_SIZE + 3]u8 =
+        undefined;
+
+    const written = try record.encodeInto(&output);
+
+    try expectEq(output.len, written);
+    try testing.expectEqualSlices(u8, &.{
+        // Header
+        0x47, 0x4b, 0x44, 0x42,
+        0x01, 0x02, 0x00, 0x00,
+        0x00, 0x03, 0x00, 0x00,
+        0x00, 0x00,
+
+        // Key: "cat"
+        0x63, 0x61,
+        0x74,
+    }, &output);
+}
+
+test "record encoding rejects a short buffer without modifying it" {
+    const record = storage.Record{
+        .op = .put,
+        .key = "cat",
+        .value = "meow",
+    };
+
+    const required_length = storage.ENCODED_SIZE + 3 + 4;
+    var output = [_]u8{0xaa} ** (required_length - 1);
+
+    try testing.expectError(
+        error.BufferTooSmall,
+        record.encodeInto(&output),
+    );
+
+    for (output) |byte| {
+        try expectEq(@as(u8, 0xaa), byte);
+    }
+}
