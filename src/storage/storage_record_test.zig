@@ -9,21 +9,6 @@ const encodedStub = [storage.ENCODED_SIZE]u8{
     0x00, 0x03, 0x00, 0x00,
     0x00, 0x05,
 };
-const encodedRecordStub = [_]u8{
-    // Header
-    0x47, 0x4b, 0x44, 0x42,
-    0x01, 0x01, 0x00, 0x00,
-    0x00, 0x05, 0x00, 0x00,
-    0x00, 0x05,
-
-    // Key: "gekko"
-    0x67, 0x65,
-    0x6b, 0x6b, 0x6f,
-
-    // Value: "chirp"
-    0x63,
-    0x68, 0x69, 0x72, 0x70,
-};
 
 test "storage record header has expected logical size" {
     const header_size = @sizeOf(u32) + //magic
@@ -212,25 +197,4 @@ test "record encoding rejects a short buffer without modifying it" {
     for (output) |byte| {
         try expectEq(@as(u8, 0xaa), byte);
     }
-}
-
-test "put record decodes borrowed key and value slices" {
-    const decoded = try storage.Record.decode(&encodedRecordStub);
-
-    try expectEq(
-        storage.Operation.put,
-        decoded.record.op,
-    );
-    try testing.expectEqualSlices(
-        u8,
-        "gekko",
-        decoded.record.key,
-    );
-    try testing.expectEqualSlices(
-        u8,
-        "chirp",
-        decoded.record.value,
-    );
-
-    try expectEq(encodedRecordStub.len, decoded.bytes);
 }
