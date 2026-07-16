@@ -121,3 +121,31 @@ test "record decoding rejects a delete with a value" {
         storage.Record.decode(&malformed),
     );
 }
+
+test "consecutive records decode by advancing the consumed  byte count" {
+    const encoded_delete = [_]u8{
+        // Header: delete, key length 6, value length 0
+        0x47, 0x4b, 0x44, 0x42,
+        0x01, 0x02, 0x00, 0x00,
+        0x00, 0x06, 0x00, 0x00,
+        0x00, 0x00,
+
+        // Key: "lizard"
+        0x6c, 0x69,
+        0x7a, 0x61, 0x72, 0x64,
+    };
+
+    const log_bytes = encodedRecordStub ++ encoded_delete;
+
+    const first = try storage.Record.decode(&log_bytes);
+    const second = try storage.Record.decode(log_bytes[first.bytes..]);
+
+    try expectEq(storage.Operation.put, first.record.op);
+    try testing.expectEqualSlices(u8, "gekko", first.record.key);
+
+    try expectEq(storage.Operation.delete, second.record.op);
+    try testing.expectEqualSlices(u8, "lizard", second.record.key);
+    try expectEq(@as(usize, 0), second.record.value.len);
+
+    try expectEq(log_bytes.len, first.bytes + second.bytes);
+}
