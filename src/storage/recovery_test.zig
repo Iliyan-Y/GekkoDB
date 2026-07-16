@@ -53,4 +53,33 @@ test "recovery indexes put records in storage order" {
         @as(u32, @intCast(try gekko.encodedLength())),
         gekko_location.length,
     );
+    try expectEq(@as(u32, 7), lizard_location.segment_id);
+    try expectEq(@as(u32, 7), gekko_location.segment_id);
+}
+test "recovery removes a key when replaying a tombstone" {
+    const k = "lizard";
+    const del_lizard = storage.Record{
+        .op = .delete,
+        .key = k,
+        .value = "",
+    };
+
+    var segment: [storage.ENCODED_SIZE + k.len]u8 = undefined;
+
+    const written = try del_lizard.encodeInto(&segment);
+    var index = domain.Index.init(testing.allocator);
+    defer index.deinit();
+
+    try index.put(k, .{
+        .segment_id = 3,
+        .offset = 128,
+        .length = 25,
+    });
+
+    try recovery.recoverSegment(
+        &index,
+        3,
+        segment[0..written],
+    );
+    try testing.expect(index.get(k) == null);
 }
