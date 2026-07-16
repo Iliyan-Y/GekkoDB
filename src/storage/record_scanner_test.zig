@@ -46,3 +46,19 @@ test "scanner returns consecutive records with their offsets" {
         second.bytes);
     try testing.expect((try scanner.next()) == null);
 }
+
+test "scanner remains at the failing record after a decode error" {
+    const truncated_log = encoded_log[0 .. encoded_log.len - 1];
+    var scanner = scanner_module.RecordScanner.init(truncated_log);
+
+    const first = (try scanner.next()).?;
+    const failing_offset = scanner.offset;
+
+    try testing.expectError(
+        error.TruncatedRecord,
+        scanner.next(),
+    );
+
+    try expectEq(first.bytes, failing_offset);
+    try expectEq(failing_offset, scanner.offset);
+}
