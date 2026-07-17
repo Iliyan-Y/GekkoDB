@@ -24,6 +24,37 @@ pub const ActiveLog = struct {
         try self.file.sync(self.io);
     }
 
+    pub fn truncateTo(self: *@This(), new_length: u64) !void {
+        if (new_length > self.next_offset) {
+            return error.InvalidTruncateLength;
+        }
+
+        try self.file.setLength(self.io, new_length);
+        self.next_offset = new_length;
+    }
+
+    pub fn readAllAlloc(
+        self: *const @This(),
+        allocator: std.mem.Allocator,
+    ) ![]u8 {
+        const length = std.math.cast(usize, self.next_offset) orelse return error.LogTooLarge;
+
+        const bytes = try allocator.alloc(u8, length);
+        errdefer allocator.free(bytes);
+
+        const bytes_read = try self.file.readPositionalAll(
+            self.io,
+            bytes,
+            0,
+        );
+
+        if (bytes_read != bytes.len) {
+            return error.UnexpectedEndOfFile;
+        }
+
+        return bytes;
+    }
+
     pub fn deinit(self: *@This()) void {
         self.file.close(self.io);
         self.* = undefined;
