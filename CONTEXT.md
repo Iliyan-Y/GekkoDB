@@ -52,6 +52,12 @@
 - Durability is explicit: `appendEncoded()` does not sync automatically; callers choose when to call `ActiveLog.sync()` so the future engine can support per-write or batched durability policies.
 - Active-log tests cover consecutive offsets and bytes, restart/reopen behavior, offset overflow before mutation, and integration with a decodable storage record.
 - `zig build test` passed with the active-log tests included in `src/root.zig`.
+- Added `RecoveryResult` with `valid_bytes` and `discarded_tail_bytes` so active-log recovery can report the last safe file boundary without performing file I/O itself.
+- Extracted shared single-record replay logic inside `src/storage/recovery.zig`; strict and active recovery now apply decoded records to the index identically.
+- Added `recoverActiveSegment()`. It treats only `error.TruncatedRecord` as a recoverable crash-torn tail and continues to propagate known corruption such as invalid magic, version, or operation metadata.
+- Kept `recoverSegment()` strict for immutable historical segments; an incomplete record remains a startup error there.
+- Added post-development recovery tests for a clean active segment, incomplete header, incomplete payload, known corruption, and strict recovery of a torn tail.
+- The newly added recovery tests have not yet been confirmed with `zig build test`; the user will run tests and report failures.
 
 ## Current Working Shape
 
@@ -71,12 +77,13 @@
 - Storage record tests verify the logical encoded header size, explicit big-endian encoding/decoding, invalid operation tags, format metadata, truncation handling, `put`/`delete` semantics, and consecutive record decoding.
 - `Record.encodedLength()` calculates the complete header, key, and value length without allocating memory and reports `error.RecordTooLarge` on arithmetic overflow.
 - Recovery currently operates on an in-memory byte slice; it does not open, map, repair, or persist files.
+- Active recovery reports the safe byte boundary and damaged-tail length but does not yet truncate the active-log file.
 - `RecordLocation.length` currently means the complete encoded record length, allowing the future read path to slice exactly one record before decoding it.
 - No file-backed startup recovery, database engine API, read path, Unix socket protocol, concurrency control, segment rolling, mmap integration, checksum, or compaction exists yet.
 
 ## Next Likely Step
 
-- Connect file startup recovery to `RecordScanner`, including an explicit policy for an incomplete final record after a crash.
-- Decide whether an incomplete final record is a recoverable torn tail that should be truncated or a startup error; corruption in the middle of a segment should remain an error.
+- Connect file startup recovery to `recoverActiveSegment()`: read the active file, replay it, and truncate it to `valid_bytes` when `discarded_tail_bytes` is nonzero.
+- Preserve the chosen policy: incomplete active-log tails are recoverable, immutable segment tails and recognizable corruption remain startup errors.
 - After file append and recovery work, introduce a small database engine that coordinates storage and the index for `put`, `get`, and `delete`.
 - Unix domain sockets, multi-client synchronization, segment rolling, mmap reads, checksums, and stress testing remain later MVP work.
