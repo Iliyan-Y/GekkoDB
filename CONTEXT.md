@@ -57,7 +57,13 @@
 - Added `recoverActiveSegment()`. It treats only `error.TruncatedRecord` as a recoverable crash-torn tail and continues to propagate known corruption such as invalid magic, version, or operation metadata.
 - Kept `recoverSegment()` strict for immutable historical segments; an incomplete record remains a startup error there.
 - Added post-development recovery tests for a clean active segment, incomplete header, incomplete payload, known corruption, and strict recovery of a torn tail.
-- The newly added recovery tests have not yet been confirmed with `zig build test`; the user will run tests and report failures.
+- Added `ActiveLog.truncateTo()` as a shrink-only repair operation. It rejects attempts to extend the file and updates `next_offset` only after the filesystem operation succeeds.
+- Added `ActiveLog.readAllAlloc()` to load the active log into caller-owned temporary memory using an injected allocator. It verifies that the full expected file length was read.
+- Added `src/storage/startup_recovery.zig` as the coordinator between the file adapter, byte-oriented recovery, and the in-memory index.
+- `recoverActiveLog()` owns and frees the temporary file buffer, rebuilds the index, truncates a reported torn tail, and syncs the repair before returning success.
+- Added file-level startup recovery tests for a clean log, physical torn-tail truncation, corrected append offset after repair, and non-truncation of recognizable corruption.
+- Updated `Readme.md` with the startup-recovery memory ownership chain, borrowed-versus-owned slice lifetimes, exact-length reads, and crash-tail policy.
+- The user confirmed that `zig build test` passes after all recovery and startup-recovery changes.
 
 ## Current Working Shape
 
@@ -72,18 +78,21 @@
 - Segment recovery exists in `src/storage/recovery.zig`, with focused put and tombstone tests in `src/storage/recovery_test.zig`.
 - The file-backed active log exists in `src/storage/active_log.zig`, with focused tests in `src/storage/active_log_test.zig`.
 - Active-log writes are unbuffered positional writes of already encoded caller-owned bytes; syncing remains an explicit caller decision.
+- `ActiveLog` can read its complete contents into caller-owned temporary memory and can safely shrink itself to a validated byte boundary.
+- File-backed active-log startup recovery exists in `src/storage/startup_recovery.zig`, with tests in `src/storage/startup_recovery_test.zig`.
+- Startup recovery syncs a torn-tail truncation before it reports success and leaves recognizable corruption untouched.
 - `src/root.zig` imports module-specific tests for Zig test discovery.
 - Tests currently verify insert/get, updating an existing key, and deleting a key.
 - Storage record tests verify the logical encoded header size, explicit big-endian encoding/decoding, invalid operation tags, format metadata, truncation handling, `put`/`delete` semantics, and consecutive record decoding.
 - `Record.encodedLength()` calculates the complete header, key, and value length without allocating memory and reports `error.RecordTooLarge` on arithmetic overflow.
-- Recovery currently operates on an in-memory byte slice; it does not open, map, repair, or persist files.
-- Active recovery reports the safe byte boundary and damaged-tail length but does not yet truncate the active-log file.
+- Core recovery remains a byte-slice operation, while `startup_recovery.zig` adapts it to the file-backed active log and performs physical repair.
 - `RecordLocation.length` currently means the complete encoded record length, allowing the future read path to slice exactly one record before decoding it.
-- No file-backed startup recovery, database engine API, read path, Unix socket protocol, concurrency control, segment rolling, mmap integration, checksum, or compaction exists yet.
+- No database engine API, file-backed read path, Unix socket protocol, concurrency control, segment rolling, mmap integration, checksum, or compaction exists yet.
 
 ## Next Likely Step
 
-- Connect file startup recovery to `recoverActiveSegment()`: read the active file, replay it, and truncate it to `valid_bytes` when `discarded_tail_bytes` is nonzero.
-- Preserve the chosen policy: incomplete active-log tails are recoverable, immutable segment tails and recognizable corruption remain startup errors.
-- After file append and recovery work, introduce a small database engine that coordinates storage and the index for `put`, `get`, and `delete`.
+- Introduce a small database engine/application boundary that owns an `ActiveLog` and an `Index` and coordinates startup recovery.
+- Implement the engine write path incrementally, starting with `put`: encode a borrowed record into explicitly owned temporary memory, append it, then update the index only after the append succeeds.
+- Keep durability policy explicit when designing the engine: decide whether `put` syncs every mutation or accepts a configurable/batched policy before acknowledging writes.
+- After `put`, add the active-file read path needed by `get`, followed by tombstone append and index removal for `delete`.
 - Unix domain sockets, multi-client synchronization, segment rolling, mmap reads, checksums, and stress testing remain later MVP work.

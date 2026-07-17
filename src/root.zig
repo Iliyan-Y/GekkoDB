@@ -5,4 +5,5 @@ test {
     _ = @import("storage/record_scanner_test.zig");
     _ = @import("storage/recovery_test.zig");
     _ = @import("storage/active_log_test.zig");
+    _ = @import("storage/startup_recovery_test.zig");
 }
