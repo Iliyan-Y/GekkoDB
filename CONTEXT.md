@@ -34,6 +34,24 @@
 - Implemented `Record.encodedLength()` using checked `std.math.add` operations so record-size arithmetic cannot silently overflow `usize`.
 - Corrected `encodedLength()` to calculate header bytes plus key bytes plus value bytes.
 - Session used implementation-first development followed by focused tests, rather than test-driven development.
+- Implemented `Record.encodeInto()` for allocation-free encoding into caller-owned buffers.
+- Implemented borrowed record decoding with validation for magic, format version, operation semantics, truncated headers, and truncated payloads.
+- Split decoding coverage into `src/storage/storage_record_decode_test.zig` to keep tests focused and file sizes manageable.
+- Added tests for put and delete decoding, consecutive records, malformed metadata, and incomplete records.
+- Added `RecordScanner` in `src/storage/record_scanner.zig` to iterate over consecutive encoded records without allocating or copying key/value bytes.
+- `RecordScanner.next()` returns the record's starting offset and encoded byte length, returns `null` at a clean end of input, and does not advance its offset when decoding fails.
+- Added `recoverSegment()` in `src/storage/recovery.zig` to replay one segment into the in-memory index in storage order.
+- Recovery stores put locations using the segment ID, encoded-record offset, and complete encoded-record length; delete tombstones remove the corresponding live index entry.
+- Recovery performs checked conversions from memory-oriented `usize` offsets/lengths to the compact fixed-width fields in `RecordLocation`.
+- Recovery tests construct segment bytes programmatically with `Record.encodeInto()` instead of duplicating binary fixtures.
+- Put and delete recovery behavior have separate tests. Put recovery verifies segment ID, offset, and length; delete recovery verifies tombstone removal.
+- New examples use lizard/gekko terminology rather than cats.
+- Added `ActiveLog` in `src/storage/active_log.zig` as the file-backed append adapter.
+- `ActiveLog.open()` owns its file handle, preserves existing bytes with `truncate = false`, and initializes `next_offset` from the existing file length.
+- `appendEncoded()` borrows a caller-owned encoded byte slice, writes it positionally without allocating, returns its starting offset, and advances state only after a successful write.
+- Durability is explicit: `appendEncoded()` does not sync automatically; callers choose when to call `ActiveLog.sync()` so the future engine can support per-write or batched durability policies.
+- Active-log tests cover consecutive offsets and bytes, restart/reopen behavior, offset overflow before mutation, and integration with a decodable storage record.
+- `zig build test` passed with the active-log tests included in `src/root.zig`.
 
 ## Current Working Shape
 
@@ -41,14 +59,24 @@
 - `RecordLocation` exists in `src/domain/index.zig`.
 - Index tests live in `src/domain/index_test.zig`.
 - Storage record format constants/types, header encoding/decoding, and a logical borrowed record type exist in `src/storage/storage_record.zig`.
-- Storage record tests live in `src/storage/storage_record_test.zig`.
+- Storage record encoding tests live in `src/storage/storage_record_test.zig`; decoding and corruption tests live in `src/storage/storage_record_decode_test.zig`.
+- `Record.encodeInto()` writes `[header][key][value]` into caller-owned memory without allocating.
+- `Record.decode()` returns borrowed key/value slices and the number of encoded bytes consumed.
+- `RecordScanner` exists in `src/storage/record_scanner.zig`, with focused tests in `src/storage/record_scanner_test.zig`.
+- Segment recovery exists in `src/storage/recovery.zig`, with focused put and tombstone tests in `src/storage/recovery_test.zig`.
+- The file-backed active log exists in `src/storage/active_log.zig`, with focused tests in `src/storage/active_log_test.zig`.
+- Active-log writes are unbuffered positional writes of already encoded caller-owned bytes; syncing remains an explicit caller decision.
 - `src/root.zig` imports module-specific tests for Zig test discovery.
 - Tests currently verify insert/get, updating an existing key, and deleting a key.
-- Storage record tests verify the logical encoded header size, explicit big-endian encoding/decoding, rejection of invalid operation tags, `put`/`delete` header construction, and rejection of delete values.
+- Storage record tests verify the logical encoded header size, explicit big-endian encoding/decoding, invalid operation tags, format metadata, truncation handling, `put`/`delete` semantics, and consecutive record decoding.
 - `Record.encodedLength()` calculates the complete header, key, and value length without allocating memory and reports `error.RecordTooLarge` on arithmetic overflow.
-- No persistence, sockets, or file-backed storage has been added yet.
+- Recovery currently operates on an in-memory byte slice; it does not open, map, repair, or persist files.
+- `RecordLocation.length` currently means the complete encoded record length, allowing the future read path to slice exactly one record before decoding it.
+- No file-backed startup recovery, database engine API, read path, Unix socket protocol, concurrency control, segment rolling, mmap integration, checksum, or compaction exists yet.
 
 ## Next Likely Step
 
-- Add focused `encodedLength()` tests for both `put` and `delete` records.
-- After the length calculation is covered, add full record encoding for `put` and `delete`: `[header][key bytes][value bytes]` for put and `[header][key bytes]` for delete.
+- Connect file startup recovery to `RecordScanner`, including an explicit policy for an incomplete final record after a crash.
+- Decide whether an incomplete final record is a recoverable torn tail that should be truncated or a startup error; corruption in the middle of a segment should remain an error.
+- After file append and recovery work, introduce a small database engine that coordinates storage and the index for `put`, `get`, and `delete`.
+- Unix domain sockets, multi-client synchronization, segment rolling, mmap reads, checksums, and stress testing remain later MVP work.
