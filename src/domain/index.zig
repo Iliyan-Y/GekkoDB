@@ -34,7 +34,7 @@ pub const Index = struct {
         try self.map.put(owned_key, value);
     }
 
-    pub fn get(self: *Index, key: []const u8) ?RecordLocation {
+    pub fn get(self: *const @This(), key: []const u8) ?RecordLocation {
         return self.map.get(key);
     }
 

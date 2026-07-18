@@ -217,3 +217,78 @@ test "engine put does not retain caller-owned buffers" {
     try testing.expectEqualSlices(u8, "gekko", decoded.record.key);
     try testing.expectEqualSlices(u8, "green", decoded.record.value);
 }
+
+test "engine get returns an owned value and null for a missing key" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var engine = try engine_module.Engine.open(
+        testing.allocator,
+        tmp.dir,
+        io,
+        "active.gkdb",
+        21,
+    );
+    defer engine.deinit();
+
+    try testing.expect((try engine.getAlloc(
+        testing.allocator,
+        "missing",
+    )) == null);
+
+    try engine.put("gekko", "green");
+
+    const first = (try engine.getAlloc(
+        testing.allocator,
+        "gekko",
+    )).?;
+    defer testing.allocator.free(first);
+
+    try engine.put("gekko", "blue");
+
+    const latest = (try engine.getAlloc(
+        testing.allocator,
+        "gekko",
+    )).?;
+    defer testing.allocator.free(latest);
+
+    try testing.expectEqualSlices(u8, "green", first);
+    try testing.expectEqualSlices(u8, "blue", latest);
+}
+
+test "engine get reads a record recovered after restart" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    {
+        var engine = try engine_module.Engine.open(
+            testing.allocator,
+            tmp.dir,
+            io,
+            "active.gkdb",
+            23,
+        );
+        defer engine.deinit();
+
+        try engine.put("lizard", "amber");
+    }
+
+    var reopened = try engine_module.Engine.open(
+        testing.allocator,
+        tmp.dir,
+        io,
+        "active.gkdb",
+        23,
+    );
+    defer reopened.deinit();
+
+    const value = (try reopened.getAlloc(
+        testing.allocator,
+        "lizard",
+    )).?;
+    defer testing.allocator.free(value);
+
+    try testing.expectEqualSlices(u8, "amber", value);
+}

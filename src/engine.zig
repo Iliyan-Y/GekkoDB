@@ -70,6 +70,35 @@ pub const Engine = struct {
         });
     }
 
+    pub fn getAlloc(
+        self: *const @This(),
+        allocator: std.mem.Allocator,
+        key: []const u8,
+    ) !?[]u8 {
+        const location = self.index.get(key) orelse return null;
+
+        if (location.segment_id != self.active_segment_id) {
+            return error.SegmentNotAvailable;
+        }
+
+        const encoded = try self.active_log.readRangeAlloc(allocator, location.offset, location.length);
+        defer allocator.free(encoded);
+
+        const decoded = try storage.Record.decode(encoded);
+
+        if (decoded.bytes != encoded.len) {
+            return error.InvalidRecordLength;
+        }
+        if (decoded.record.op != .put) {
+            return error.IndexPointsToDelete;
+        }
+        if (!std.mem.eql(u8, key, decoded.record.key)) {
+            return error.IndexKeyMismatch;
+        }
+
+        return try allocator.dupe(u8, decoded.record.value);
+    }
+
     pub fn deinit(self: *@This()) void {
         self.active_log.deinit();
         self.index.deinit();
