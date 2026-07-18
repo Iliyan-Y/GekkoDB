@@ -50,7 +50,7 @@ pub const Engine = struct {
         };
 
         const encoded_length = try record.encodedLength();
-        const location_length = std.mat.cast(
+        const location_length = std.math.cast(
             u32,
             encoded_length,
         ) orelse return error.RecordTooLarge;

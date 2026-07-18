@@ -130,3 +130,90 @@ test "engine rejects recognizable active log corruption" {
         ),
     );
 }
+
+test "engine put appends records and indexes their locations" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var engine = try engine_module.Engine.open(
+        testing.allocator,
+        tmp.dir,
+        io,
+        "active.gkdb",
+        17,
+    );
+    defer engine.deinit();
+
+    try engine.put("gekko", "green");
+    try engine.put("lizard", "amber");
+
+    const first_length = storage.ENCODED_SIZE + "gekko".len + "green".len;
+    const second_length = storage.ENCODED_SIZE + "lizard".len + "amber".len;
+
+    const first_location = engine.index.get("gekko").?;
+    try testing.expectEqual(@as(u32, 17), first_location.segment_id);
+    try testing.expectEqual(@as(u64, 0), first_location.offset);
+    try testing.expectEqual(@as(u32, first_length), first_location.length);
+
+    const second_location = engine.index.get("lizard").?;
+    try testing.expectEqual(@as(u32, 17), second_location.segment_id);
+    try testing.expectEqual(@as(u64, first_length), second_location.offset);
+    try testing.expectEqual(@as(u32, second_length), second_location.length);
+
+    const stored = try tmp.dir.readFileAlloc(
+        io,
+        "active.gkdb",
+        testing.allocator,
+        .limited(128),
+    );
+    defer testing.allocator.free(stored);
+
+    const first = try storage.Record.decode(stored);
+    const second = try storage.Record.decode(stored[first.bytes..]);
+
+    try testing.expectEqual(storage.Operation.put, first.record.op);
+    try testing.expectEqualSlices(u8, "gekko", first.record.key);
+    try testing.expectEqualSlices(u8, "green", first.record.value);
+    try testing.expectEqual(storage.Operation.put, second.record.op);
+    try testing.expectEqualSlices(u8, "lizard", second.record.key);
+    try testing.expectEqualSlices(u8, "amber", second.record.value);
+}
+
+test "engine put does not retain caller-owned buffers" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var engine = try engine_module.Engine.open(
+        testing.allocator,
+        tmp.dir,
+        io,
+        "active.gkdb",
+        19,
+    );
+    defer engine.deinit();
+
+    var key = [_]u8{ 'g', 'e', 'k', 'k', 'o' };
+    var value = [_]u8{ 'g', 'r', 'e', 'e', 'n' };
+
+    try engine.put(&key, &value);
+
+    @memset(&key, 'x');
+    @memset(&value, 'y');
+
+    try testing.expect(engine.index.get("gekko") != null);
+    try testing.expect(engine.index.get("xxxxx") == null);
+
+    const stored = try tmp.dir.readFileAlloc(
+        io,
+        "active.gkdb",
+        testing.allocator,
+        .limited(64),
+    );
+    defer testing.allocator.free(stored);
+
+    const decoded = try storage.Record.decode(stored);
+    try testing.expectEqualSlices(u8, "gekko", decoded.record.key);
+    try testing.expectEqualSlices(u8, "green", decoded.record.value);
+}
