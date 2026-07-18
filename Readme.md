@@ -7,6 +7,50 @@ maps keys to record locations instead of keeping document values in RAM.
 The project is currently under development. See `project.md` for the product
 direction and phased roadmap.
 
+## Application-level durable write path
+
+The database engine coordinates binary encoding, file persistence, and index
+updates. A `put` follows this order:
+
+```text
+borrow the caller's key and value
+        |
+calculate and validate the encoded record length
+        |
+allocate a temporary encoding buffer
+        |
+encode [header][key][value] into that buffer
+        |
+append the encoded bytes to the active log
+        |
+sync the active log to durable storage
+        |
+update the in-memory index with the record location
+        |
+free the temporary encoding buffer
+```
+
+The ordering is part of the database correctness contract. The in-memory
+index is updated only after the complete record has been appended and synced.
+Therefore, a successful `put` means the record is both durable and visible
+through the current index.
+
+The temporary encoded buffer has a short, explicit lifetime. The engine owns
+and frees it after the operation. `ActiveLog.appendEncoded()` borrows the
+buffer only while writing, and `Index.put()` duplicates and owns the key when
+a new index entry is required. Values remain in the log rather than being
+retained in memory.
+
+If append or sync fails, the index is not updated and the operation returns an
+error. A sync failure may still leave complete bytes in the log, because an
+I/O error cannot prove that no bytes reached storage. On the next successful
+startup, recovery scans the log and reconstructs the authoritative index from
+every valid complete record.
+
+Per-write syncing is the initial durability policy. A future batching policy
+must remain explicit so callers know whether an acknowledged write is already
+durable.
+
 ## Startup recovery memory ownership
 
 At startup, GekkoDB reconstructs its in-memory index by reading and scanning
