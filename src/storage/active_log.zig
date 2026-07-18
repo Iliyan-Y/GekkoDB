@@ -55,9 +55,37 @@ pub const ActiveLog = struct {
         return bytes;
     }
 
-    pub fn deinit(self: *@This()) void {
-        self.file.close(self.io);
-        self.* = undefined;
+    pub fn readRangeAlloc(
+        self: *const @This(),
+        allocator: std.mem.Allocator,
+        offset: u64,
+        length: u32,
+    ) ![]u8 {
+        const buffer_length = std.math.cast(
+            usize,
+            length,
+        ) orelse return error.ReadTooLarge;
+
+        const end_offset = std.math.add(
+            u64,
+            offset,
+            length,
+        ) catch return error.InvalidReadRange;
+
+        if (end_offset > self.next_offset) {
+            return error.InvalidReadRange;
+        }
+
+        const bytes = try allocator.alloc(u8, buffer_length);
+        errdefer allocator.free(bytes);
+
+        const bytes_read = try self.file.readPositionalAll(self.io, bytes, offset);
+
+        if (bytes_read != bytes.len) {
+            return error.UnexpectedEndOfFile;
+        }
+
+        return bytes;
     }
 
     pub fn appendEncoded(
@@ -81,5 +109,10 @@ pub const ActiveLog = struct {
         self.next_offset = end_offset;
 
         return start_offset;
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.file.close(self.io);
+        self.* = undefined;
     }
 };

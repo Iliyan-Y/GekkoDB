@@ -141,3 +141,47 @@ test "active log stores a decodable storage record" {
     try testing.expectEqualSlices(u8, record.key, decoded.record.key);
     try testing.expectEqualSlices(u8, record.value, decoded.record.value);
 }
+
+test "active log reads an exact owned byte range" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var log = try active_log.ActiveLog.open(tmp.dir, io, "active.gkdb");
+    defer log.deinit();
+
+    const first = "gekko-record";
+    const second = "lizard-record";
+
+    _ = try log.appendEncoded(first);
+    _ = try log.appendEncoded(second);
+
+    const bytes = try log.readRangeAlloc(
+        testing.allocator,
+        first.len,
+        @intCast(second.len),
+    );
+    defer testing.allocator.free(bytes);
+
+    try testing.expectEqualSlices(u8, second, bytes);
+}
+
+test "active log rejects invalid read ranges before allocating" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var log = try active_log.ActiveLog.open(tmp.dir, io, "active.gkdb");
+    defer log.deinit();
+
+    _ = try log.appendEncoded("gekko");
+
+    try testing.expectError(
+        error.InvalidReadRange,
+        log.readRangeAlloc(testing.allocator, 4, 2),
+    );
+    try testing.expectError(
+        error.InvalidReadRange,
+        log.readRangeAlloc(testing.allocator, std.math.maxInt(u64), 1),
+    );
+}
