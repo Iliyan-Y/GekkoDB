@@ -64,6 +64,18 @@
 - Added file-level startup recovery tests for a clean log, physical torn-tail truncation, corrected append offset after repair, and non-truncation of recognizable corruption.
 - Updated `Readme.md` with the startup-recovery memory ownership chain, borrowed-versus-owned slice lifetimes, exact-length reads, and crash-tail policy.
 - The user confirmed that `zig build test` passes after all recovery and startup-recovery changes.
+- Added `src/engine.zig` as the application boundary that owns the in-memory `Index`, file-backed `ActiveLog`, allocator handle, and active segment ID.
+- `Engine.open()` constructs both owned resources, uses `errdefer` for partial-initialization cleanup, and completes active-log recovery before returning a usable engine.
+- Chose per-mutation syncing for the initial durability contract: successful `put` and `delete` operations sync their log record before changing the visible in-memory index. Future group commit remains a later optimization.
+- Implemented `Engine.put()`: borrowed key/value bytes are encoded into a temporary engine-allocated buffer, appended and synced, then the index is updated with the complete encoded-record location. The temporary buffer is always freed.
+- Added `ActiveLog.readRangeAlloc()` for checked positional reads. It rejects overflowing/out-of-bounds ranges and returns caller-owned bytes allocated with the supplied allocator.
+- Made `Index.get()` const-correct so read-only engine operations can borrow `*const Engine`.
+- Implemented `Engine.getAlloc()`. It reads exactly the indexed record, validates segment ID, record length, operation, and key consistency, duplicates the value with a caller-selected allocator, and frees the temporary encoded record.
+- Implemented `Engine.delete()` with tombstone-before-index-removal ordering. Missing keys are a no-op returning `false`; existing keys return `true` after their tombstone is synced and their index entry removed.
+- Added engine tests for empty startup, recovery, torn-tail repair, corruption rejection, put offsets and bytes, caller-buffer independence, owned get results, reads after restart, durable tombstones, missing-key deletion, and no resurrection after restart.
+- Added active-log range-read tests for exact owned reads, bounds rejection, and offset arithmetic overflow.
+- Updated `Readme.md` with the application-level durable `put` sequence, temporary-buffer ownership, sync-before-index visibility, and ambiguous I/O failure behavior.
+- User preference clarified: the 200-250 line guideline applies to production code; focused test files may exceed that size.
 
 ## Current Working Shape
 
@@ -78,21 +90,26 @@
 - Segment recovery exists in `src/storage/recovery.zig`, with focused put and tombstone tests in `src/storage/recovery_test.zig`.
 - The file-backed active log exists in `src/storage/active_log.zig`, with focused tests in `src/storage/active_log_test.zig`.
 - Active-log writes are unbuffered positional writes of already encoded caller-owned bytes; syncing remains an explicit caller decision.
-- `ActiveLog` can read its complete contents into caller-owned temporary memory and can safely shrink itself to a validated byte boundary.
+- `ActiveLog` can read its complete contents or a checked positional range into caller-owned temporary memory and can safely shrink itself to a validated byte boundary.
 - File-backed active-log startup recovery exists in `src/storage/startup_recovery.zig`, with tests in `src/storage/startup_recovery_test.zig`.
 - Startup recovery syncs a torn-tail truncation before it reports success and leaves recognizable corruption untouched.
 - `src/root.zig` imports module-specific tests for Zig test discovery.
+- `Engine` exists in `src/engine.zig`; engine integration tests live together in `src/engine_test.zig`.
+- The engine owns the active log and index, completes recovery during `open()`, and currently supports durable `put`, owned `getAlloc`, and durable tombstone-based `delete` operations against the active segment.
+- `getAlloc()` returns `null` for an absent key and otherwise returns caller-owned value bytes that must be freed with the allocator supplied to the call.
+- The current durability policy syncs each successful mutation before acknowledging it. Group commit or relaxed durability has not been implemented.
 - Tests currently verify insert/get, updating an existing key, and deleting a key.
 - Storage record tests verify the logical encoded header size, explicit big-endian encoding/decoding, invalid operation tags, format metadata, truncation handling, `put`/`delete` semantics, and consecutive record decoding.
 - `Record.encodedLength()` calculates the complete header, key, and value length without allocating memory and reports `error.RecordTooLarge` on arithmetic overflow.
 - Core recovery remains a byte-slice operation, while `startup_recovery.zig` adapts it to the file-backed active log and performs physical repair.
 - `RecordLocation.length` currently means the complete encoded record length, allowing the future read path to slice exactly one record before decoding it.
-- No database engine API, file-backed read path, Unix socket protocol, concurrency control, segment rolling, mmap integration, checksum, or compaction exists yet.
+- No Unix socket protocol, concurrency control, segment rolling, immutable-segment read adapter, mmap integration, checksum, group commit, or compaction exists yet.
 
 ## Next Likely Step
 
-- Introduce a small database engine/application boundary that owns an `ActiveLog` and an `Index` and coordinates startup recovery.
-- Implement the engine write path incrementally, starting with `put`: encode a borrowed record into explicitly owned temporary memory, append it, then update the index only after the append succeeds.
-- Keep durability policy explicit when designing the engine: decide whether `put` syncs every mutation or accepts a configurable/batched policy before acknowledging writes.
-- After `put`, add the active-file read path needed by `get`, followed by tombstone append and index removal for `delete`.
-- Unix domain sockets, multi-client synchronization, segment rolling, mmap reads, checksums, and stress testing remain later MVP work.
+- Run `zig build test` after the final delete tests; test execution was left to the user in this session.
+- Review the engine's mutation failure semantics: a new-key `put` can become durable and then fail while allocating the index-owned key, leaving the current process index behind the log until restart recovery. Decide whether to stage index ownership/capacity before append or explicitly rebuild/repair on this failure.
+- Document the tombstone delete sequence in `Readme.md` alongside the durable put contract if more operational documentation is desired.
+- After hardening the single-active-segment engine boundary, design segment rolling and an immutable-segment read port. `getAlloc()` currently returns `error.SegmentNotAvailable` for any non-active segment location.
+- Keep the engine single-threaded until an explicit synchronization boundary is designed; the delete existence check, append, sync, and index removal are not safe to interleave with concurrent mutations.
+- Unix domain sockets, multi-client coordination, mmap reads, checksums, group commit, compaction, and stress testing remain later MVP work.

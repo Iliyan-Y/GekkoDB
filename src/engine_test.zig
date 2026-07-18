@@ -292,3 +292,101 @@ test "engine get reads a record recovered after restart" {
 
     try testing.expectEqualSlices(u8, "amber", value);
 }
+
+test "engine delete appends a durable tombstone before removing the index entry" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var engine = try engine_module.Engine.open(
+        testing.allocator,
+        tmp.dir,
+        io,
+        "active.gkdb",
+        25,
+    );
+    defer engine.deinit();
+
+    try engine.put("gekko", "green");
+    const tombstone_offset = engine.active_log.next_offset;
+
+    try testing.expect(try engine.delete("gekko"));
+    try testing.expect(engine.index.get("gekko") == null);
+    try testing.expect((try engine.getAlloc(
+        testing.allocator,
+        "gekko",
+    )) == null);
+
+    const stored = try tmp.dir.readFileAlloc(
+        io,
+        "active.gkdb",
+        testing.allocator,
+        .limited(128),
+    );
+    defer testing.allocator.free(stored);
+
+    const put_record = try storage.Record.decode(stored);
+    const tombstone = try storage.Record.decode(stored[put_record.bytes..]);
+
+    try testing.expectEqual(
+        @as(usize, @intCast(tombstone_offset)),
+        put_record.bytes,
+    );
+    try testing.expectEqual(storage.Operation.delete, tombstone.record.op);
+    try testing.expectEqualSlices(u8, "gekko", tombstone.record.key);
+    try testing.expectEqual(@as(usize, 0), tombstone.record.value.len);
+}
+
+test "engine delete is a no-op for a missing key" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var engine = try engine_module.Engine.open(
+        testing.allocator,
+        tmp.dir,
+        io,
+        "active.gkdb",
+        27,
+    );
+    defer engine.deinit();
+
+    try testing.expect(!(try engine.delete("missing")));
+    try testing.expectEqual(@as(u64, 0), engine.active_log.next_offset);
+    try testing.expectEqual(@as(u64, 0), try engine.active_log.file.length(io));
+}
+
+test "engine delete prevents value resurrection after restart" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    {
+        var engine = try engine_module.Engine.open(
+            testing.allocator,
+            tmp.dir,
+            io,
+            "active.gkdb",
+            29,
+        );
+        defer engine.deinit();
+
+        try engine.put("lizard", "amber");
+        try testing.expect(try engine.delete("lizard"));
+    }
+
+    var reopened = try engine_module.Engine.open(
+        testing.allocator,
+        tmp.dir,
+        io,
+        "active.gkdb",
+        29,
+    );
+    defer reopened.deinit();
+
+    try testing.expect(reopened.index.get("lizard") == null);
+    try testing.expect((try reopened.getAlloc(
+        testing.allocator,
+        "lizard",
+    )) == null);
+}

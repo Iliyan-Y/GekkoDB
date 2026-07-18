@@ -61,6 +61,7 @@ pub const Engine = struct {
         const written = try record.encodeInto(encoded);
         const offset = try self.active_log.appendEncoded(encoded[0..written]);
 
+        // for MVP we sync on every put
         try self.active_log.sync();
 
         try self.index.put(key, .{
@@ -97,6 +98,36 @@ pub const Engine = struct {
         }
 
         return try allocator.dupe(u8, decoded.record.value);
+    }
+
+    // For now, this check-and-delete sequence assumes one thread.
+    // With concurrent clients, another write could interleave
+    // between the initial lookup and tombstone append. The future
+    // engine synchronization boundary must make each mutation
+    // atomic.
+    pub fn delete(self: *@This(), key: []const u8) !bool {
+        if (self.index.get(key) == null) {
+            return false;
+        }
+
+        const record = storage.Record{
+            .op = .delete,
+            .key = key,
+            .value = "",
+        };
+
+        const encoded_length = try record.encodedLength();
+
+        const encoded = try self.allocator.alloc(u8, encoded_length);
+        defer self.allocator.free(encoded);
+
+        const written = try record.encodeInto(encoded);
+        _ = try self.active_log.appendEncoded(encoded[0..written]);
+
+        try self.active_log.sync();
+
+        self.index.delete(key);
+        return true;
     }
 
     pub fn deinit(self: *@This()) void {
